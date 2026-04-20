@@ -1341,15 +1341,36 @@ function getStoredConfig() {
 }
 
 function initFirebase(cfg) {
+  const btn = document.querySelector('#setup-overlay .btn-dark');
+  if (btn) { btn.textContent = 'Conectando...'; btn.disabled = true; }
   try {
-    if (firebase.apps.length) { firebase.app(); } else { firebase.initializeApp(cfg); }
+    // Limpiar apps previas si las hay
+    firebase.apps.forEach(app => app.delete());
+    firebase.initializeApp(cfg);
     db = firebase.database();
-    localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
-    document.getElementById('setup-overlay').style.display = 'none';
-    migrarLocalStorageAFirebase();
-    initApp();
+
+    // Probar la conexión antes de guardar
+    db.ref('.info/connected').once('value', snap => {
+      localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
+      document.getElementById('setup-overlay').style.display = 'none';
+      migrarLocalStorageAFirebase();
+      initApp();
+    }, err => {
+      if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
+      alert('No se pudo conectar a Firebase.\nVerificá el Database URL y que la Realtime Database esté activa.\n\nError: ' + err.message);
+    });
+
+    // Timeout de 8 segundos por si no responde
+    setTimeout(() => {
+      if (document.getElementById('setup-overlay').style.display !== 'none') {
+        if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
+        alert('Tiempo de espera agotado. Verificá que el Database URL sea correcto:\nhttps://tu-proyecto-default-rtdb.firebaseio.com');
+      }
+    }, 8000);
+
   } catch(e) {
-    alert('Error al conectar: ' + e.message);
+    if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
+    alert('Error al configurar Firebase: ' + e.message);
   }
 }
 
@@ -2563,8 +2584,9 @@ if (savedCfg && savedCfg.apiKey && savedCfg.databaseURL) {
         <strong>¿Cómo obtener estos datos?</strong><br>
         1. Entrá a <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent-dark);">console.firebase.google.com</a><br>
         2. Creá un proyecto → Agregá una app web<br>
-        3. Activá <strong>Realtime Database</strong> en modo de prueba<br>
-        4. Copiá y pegá el objeto <code>firebaseConfig</code> acá abajo
+        3. Activá <strong>Realtime Database</strong> → Start in test mode<br>
+        4. En <strong>Reglas</strong>, asegurate que diga: <code style="background:rgba(0,0,0,0.08);padding:1px 4px;border-radius:3px;">".read": true, ".write": true</code><br>
+        5. Copiá y pegá el objeto <code>firebaseConfig</code> acá abajo
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:5px;">
