@@ -344,7 +344,6 @@
   .badge-teal    { background: var(--accent-light); color: var(--accent); }
   .badge-green   { background: var(--accent-light); color: var(--accent); border: 1px solid #B8D9C5; }
   .badge-orange  { background: var(--accent2-light); color: var(--accent2); }
-
   /* ── Progress dots ── */
   .progress-dots { display: flex; gap: 4px; align-items: center; }
   .dot {
@@ -682,10 +681,20 @@
         <span>Listos p/ turno</span>
         <span class="nav-count" id="cnt-listos">0</span>
       </button>
+      <button class="nav-item" onclick="setView('con-turno')">
+        <span class="nav-icon">🗓</span>
+        <span>Con turno</span>
+        <span class="nav-count" id="cnt-con-turno">0</span>
+      </button>
       <button class="nav-item" onclick="setView('en-proceso')">
         <span class="nav-icon">🔧</span>
         <span>En proceso</span>
         <span class="nav-count" id="cnt-proceso">0</span>
+      </button>
+      <button class="nav-item" onclick="setView('entregados')">
+        <span class="nav-icon">✅</span>
+        <span>Entregados</span>
+        <span class="nav-count" id="cnt-entregados">0</span>
       </button>
       <button class="nav-item" id="nav-particulares" onclick="setView('particulares')">
         <span class="nav-icon">🚗</span>
@@ -1160,9 +1169,13 @@
           <input type="checkbox" id="c-turno" onchange="updateCheckRow('cr-turno','c-turno')">
           <span class="check-label">📅 Turno asignado</span>
         </label>
+        <label class="check-row" id="cr-enproceso">
+          <input type="checkbox" id="c-enproceso" onchange="updateCheckRow('cr-enproceso','c-enproceso')">
+          <span class="check-label">🔧 En proceso</span>
+        </label>
         <label class="check-row" id="cr-entrega">
           <input type="checkbox" id="c-entrega" onchange="updateCheckRow('cr-entrega','c-entrega')">
-          <span class="check-label">🔧 Entregado</span>
+          <span class="check-label">🚗 Entregado</span>
         </label>
         <label class="check-row" id="cr-factura">
           <input type="checkbox" id="c-factura" onchange="updateCheckRow('cr-factura','c-factura')">
@@ -1386,9 +1399,10 @@ function saveData() { fbSave('siniestros', data); }
 
 // ── Estado ──
 const ESTADOS = {
-  pagado:    { label: 'Pagado',               badge: 'badge-green',  dots: 6 },
-  facturado: { label: 'Facturado',            badge: 'badge-green',  dots: 5 },
-  entregado: { label: 'Entregado',            badge: 'badge-teal',   dots: 4 },
+  pagado:    { label: 'Pagado',               badge: 'badge-green',  dots: 7 },
+  facturado: { label: 'Facturado',            badge: 'badge-green',  dots: 6 },
+  entregado: { label: 'Entregado',            badge: 'badge-teal',   dots: 5 },
+  enproceso: { label: 'En proceso',           badge: 'badge-orange', dots: 4 },
   turno:     { label: 'Con turno',            badge: 'badge-purple', dots: 3 },
   repuestos: { label: 'Repuestos recibidos',  badge: 'badge-amber',  dots: 2 },
   ot:        { label: 'OT recibida',          badge: 'badge-blue',   dots: 1 },
@@ -1396,17 +1410,18 @@ const ESTADOS = {
 };
 
 function getEstado(s) {
-  if (s.pago)    return ESTADOS.pagado;
-  if (s.factura) return ESTADOS.facturado;
-  if (s.entrega) return ESTADOS.entregado;
-  if (s.turno)   return ESTADOS.turno;
-  if (s.rep)     return ESTADOS.repuestos;
-  if (s.ot)      return ESTADOS.ot;
+  if (s.pago)      return ESTADOS.pagado;
+  if (s.factura)   return ESTADOS.facturado;
+  if (s.entrega)   return ESTADOS.entregado;
+  if (s.enproceso) return ESTADOS.enproceso;
+  if (s.turno)     return ESTADOS.turno;
+  if (s.rep)       return ESTADOS.repuestos;
+  if (s.ot)        return ESTADOS.ot;
   return ESTADOS.inicial;
 }
 
 function getDots(s) {
-  const checks = [s.ot, s.rep, s.turno, s.entrega, s.factura, s.pago];
+  const checks = [s.ot, s.rep, s.turno, s.enproceso, s.entrega, s.factura, s.pago];
   return checks.map((c, i) => {
     const pastDone = checks.slice(0, i).every(x => x);
     if (c) return '<div class="dot done"></div>';
@@ -1422,7 +1437,9 @@ function filtrarPorVista(s) {
     case 'sin-ot': return !s.ot;
     case 'sin-repuestos': return s.ot && !s.rep;
     case 'listos': return s.rep && !s.turno;
-    case 'en-proceso': return s.turno && !s.entrega;
+    case 'con-turno': return s.turno && !s.enproceso && !s.entrega;
+    case 'en-proceso': return s.enproceso && !s.entrega;
+    case 'entregados': return s.entrega && !s.pago;
     case 'pendiente-cobro': return s.factura && !s.pago;
     case 'cerrados': return s.pago;
     default: return true;
@@ -1441,7 +1458,9 @@ const VIEW_TITLES = {
   'sin-ot': 'Sin orden de trabajo',
   'sin-repuestos': 'OT recibida — esperando repuestos',
   'listos': 'Listos para dar turno',
+  'con-turno': 'Con turno asignado',
   'en-proceso': 'En proceso',
+  'entregados': 'Entregados — pendiente factura/cobro',
   'pendiente-cobro': 'Facturados — pendiente de cobro',
   'cerrados': 'Siniestros cerrados',
   'calendario': 'Calendario de turnos',
@@ -1455,7 +1474,7 @@ function setView(v) {
   document.getElementById('view-title').textContent = VIEW_TITLES[v] || v;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const items = document.querySelectorAll('.nav-item');
-  const idx = ['todos','sin-ot','sin-repuestos','listos','en-proceso','particulares','pendiente-cobro','cerrados','calendario','pagos','cuentas'].indexOf(v);
+  const idx = ['todos','sin-ot','sin-repuestos','listos','con-turno','en-proceso','entregados','particulares','pendiente-cobro','cerrados','calendario','pagos','cuentas'].indexOf(v);
   if (idx !== -1 && items[idx]) items[idx].classList.add('active');
 
   const isCal   = v === 'calendario';
@@ -1520,12 +1539,14 @@ function renderStats() {
 }
 
 function updateCounts() {
-  document.getElementById('cnt-todos').textContent = data.length;
-  document.getElementById('cnt-ot').textContent = data.filter(s => !s.ot).length;
-  document.getElementById('cnt-rep').textContent = data.filter(s => s.ot && !s.rep).length;
-  document.getElementById('cnt-listos').textContent = data.filter(s => s.rep && !s.turno).length;
-  document.getElementById('cnt-proceso').textContent = data.filter(s => s.turno && !s.entrega).length;
-  document.getElementById('cnt-cobro').textContent = data.filter(s => s.factura && !s.pago).length;
+  document.getElementById('cnt-todos').textContent    = data.length;
+  document.getElementById('cnt-ot').textContent       = data.filter(s => !s.ot).length;
+  document.getElementById('cnt-rep').textContent      = data.filter(s => s.ot && !s.rep).length;
+  document.getElementById('cnt-listos').textContent   = data.filter(s => s.rep && !s.turno).length;
+  document.getElementById('cnt-con-turno').textContent= data.filter(s => s.turno && !s.enproceso && !s.entrega).length;
+  document.getElementById('cnt-proceso').textContent  = data.filter(s => s.enproceso && !s.entrega).length;
+  document.getElementById('cnt-entregados').textContent = data.filter(s => s.entrega && !s.pago).length;
+  document.getElementById('cnt-cobro').textContent    = data.filter(s => s.factura && !s.pago).length;
 }
 
 function renderTable() {
@@ -1584,10 +1605,10 @@ function openNew() {
     document.getElementById(id).value = '';
   });
   document.getElementById('f-fecha').value = new Date().toISOString().slice(0,10);
-  ['c-ot','c-rep','c-turno','c-entrega','c-factura','c-pago'].forEach(id => {
+  ['c-ot','c-rep','c-turno','c-enproceso','c-entrega','c-factura','c-pago'].forEach(id => {
     document.getElementById(id).checked = false;
   });
-  ['cr-ot','cr-rep','cr-turno','cr-entrega','cr-factura','cr-pago'].forEach(id => {
+  ['cr-ot','cr-rep','cr-turno','cr-enproceso','cr-entrega','cr-factura','cr-pago'].forEach(id => {
     document.getElementById(id).classList.remove('checked');
   });
   document.getElementById('overlay-form').classList.remove('hidden');
@@ -1612,8 +1633,8 @@ function openEdit(id) {
   document.getElementById('f-turno-fecha').value = s.turnoFecha || '';
   document.getElementById('f-obs').value = s.obs || '';
 
-  const checks = { 'c-ot': s.ot, 'c-rep': s.rep, 'c-turno': s.turno, 'c-entrega': s.entrega, 'c-factura': s.factura, 'c-pago': s.pago };
-  const rows   = { 'c-ot': 'cr-ot', 'c-rep': 'cr-rep', 'c-turno': 'cr-turno', 'c-entrega': 'cr-entrega', 'c-factura': 'cr-factura', 'c-pago': 'cr-pago' };
+  const checks = { 'c-ot': s.ot, 'c-rep': s.rep, 'c-turno': s.turno, 'c-enproceso': s.enproceso, 'c-entrega': s.entrega, 'c-factura': s.factura, 'c-pago': s.pago };
+  const rows   = { 'c-ot': 'cr-ot', 'c-rep': 'cr-rep', 'c-turno': 'cr-turno', 'c-enproceso': 'cr-enproceso', 'c-entrega': 'cr-entrega', 'c-factura': 'cr-factura', 'c-pago': 'cr-pago' };
   Object.entries(checks).forEach(([cid, val]) => {
     document.getElementById(cid).checked = !!val;
     document.getElementById(rows[cid]).classList.toggle('checked', !!val);
@@ -1650,6 +1671,7 @@ function saveSiniestro() {
     ot:         document.getElementById('c-ot').checked,
     rep:        document.getElementById('c-rep').checked,
     turno:      document.getElementById('c-turno').checked,
+    enproceso:  document.getElementById('c-enproceso').checked,
     entrega:    document.getElementById('c-entrega').checked,
     factura:    document.getElementById('c-factura').checked,
     pago:       document.getElementById('c-pago').checked,
@@ -1671,10 +1693,10 @@ function saveSiniestro() {
     document.getElementById(id).value = '';
   });
   document.getElementById('f-fecha').value = new Date().toISOString().slice(0,10);
-  ['c-ot','c-rep','c-turno','c-entrega','c-factura','c-pago'].forEach(id => {
+  ['c-ot','c-rep','c-turno','c-enproceso','c-entrega','c-factura','c-pago'].forEach(id => {
     document.getElementById(id).checked = false;
   });
-  ['cr-ot','cr-rep','cr-turno','cr-entrega','cr-factura','cr-pago'].forEach(id => {
+  ['cr-ot','cr-rep','cr-turno','cr-enproceso','cr-entrega','cr-factura','cr-pago'].forEach(id => {
     document.getElementById(id).classList.remove('checked');
   });
   setTimeout(() => document.getElementById('f-patente').focus(), 50);
@@ -1690,12 +1712,13 @@ let spId = null;
 let spSnapshot = null;
 
 const SP_STEPS = [
-  { key: 'ot',      label: 'OT recibida',        icon: '📋' },
-  { key: 'rep',     label: 'Repuestos recibidos', icon: '📦' },
-  { key: 'turno',   label: 'Turno asignado',      icon: '📅' },
-  { key: 'entrega', label: 'Entregado',            icon: '🔧' },
-  { key: 'factura', label: 'Facturado',            icon: '🧾' },
-  { key: 'pago',    label: 'Pago recibido',        icon: '💰' },
+  { key: 'ot',        label: 'OT recibida',        icon: '📋' },
+  { key: 'rep',       label: 'Repuestos recibidos', icon: '📦' },
+  { key: 'turno',     label: 'Turno asignado',      icon: '📅' },
+  { key: 'enproceso', label: 'En proceso',           icon: '🔧' },
+  { key: 'entrega',   label: 'Entregado',            icon: '🚗' },
+  { key: 'factura',   label: 'Facturado',            icon: '🧾' },
+  { key: 'pago',      label: 'Pago recibido',        icon: '💰' },
 ];
 
 function openStatusPopover(id, el, event) {
@@ -1829,6 +1852,7 @@ function openDetail(id) {
       ${bool(s.ot, 'OT recibida')}
       ${bool(s.rep, 'Repuestos')}
       ${bool(s.turno, 'Turno asignado')}
+      ${bool(s.enproceso, 'En proceso')}
       ${bool(s.entrega, 'Entregado')}
       ${bool(s.factura, 'Facturado')}
       ${bool(s.pago, 'Pago recibido')}
