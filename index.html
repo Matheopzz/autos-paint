@@ -767,7 +767,7 @@
         <table>
           <thead>
             <tr>
-              <th>Inspección</th>
+              <th style="cursor:pointer;user-select:none;" onclick="toggleSort()" id="th-inspeccion">Inspección <span id="sort-icon">↓</span></th>
               <th>Patente</th>
               <th>Vehículo</th>
               <th>Compañía</th>
@@ -1343,36 +1343,53 @@ function initFirebase(cfg) {
     db = firebase.database();
     localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
     document.getElementById('setup-overlay').style.display = 'none';
+    migrarLocalStorageAFirebase();
     initApp();
   } catch(e) {
     alert('Error al conectar: ' + e.message);
   }
 }
 
-function saveSetup() {
-  const cfg = {
-    apiKey:            document.getElementById('fb-apiKey').value.trim(),
-    authDomain:        document.getElementById('fb-authDomain').value.trim(),
-    databaseURL:       document.getElementById('fb-databaseURL').value.trim(),
-    projectId:         document.getElementById('fb-projectId').value.trim(),
-    storageBucket:     document.getElementById('fb-storageBucket').value.trim(),
-    messagingSenderId: document.getElementById('fb-messagingSenderId').value.trim(),
-    appId:             document.getElementById('fb-appId').value.trim(),
-  };
-  if (!cfg.apiKey || !cfg.databaseURL) { alert('API Key y Database URL son obligatorios.'); return; }
-  initFirebase(cfg);
+function migrarLocalStorageAFirebase() {
+  // Migra datos viejos de localStorage a Firebase (solo si Firebase está vacío)
+  const colecciones = [
+    { ls: 'taller_siniestros_v2', fb: 'siniestros' },
+    { ls: 'taller_pagos_v1',      fb: 'pagos'      },
+    { ls: 'taller_cuentas_v1',    fb: 'cuentas'    },
+    { ls: 'taller_particulares_v1', fb: 'particulares' },
+  ];
+  colecciones.forEach(({ ls, fb }) => {
+    const raw = localStorage.getItem(ls);
+    if (!raw) return;
+    try {
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr) || arr.length === 0) return;
+      // Solo migrar si Firebase está vacío
+      db.ref(fb).once('value', snap => {
+        if (!snap.val()) {
+          fbSave(fb, arr);
+          console.log(`Migrado ${arr.length} registros de ${ls} a Firebase/${fb}`);
+        }
+      });
+    } catch(e) {}
+  });
 }
 
 function fbListen(path, cb) {
   db.ref(path).on('value', snap => {
     const val = snap.val();
-    cb(val ? Object.values(val) : []);
+    if (!val) { cb([]); return; }
+    // Firebase puede devolver objeto o array, normalizamos siempre a array
+    const arr = Array.isArray(val)
+      ? val.filter(Boolean)
+      : Object.values(val).filter(Boolean);
+    cb(arr);
   });
 }
 
 function fbSave(path, arr) {
   const obj = {};
-  arr.forEach(item => { obj[item.id] = item; });
+  arr.forEach(item => { if (item && item.id) obj[item.id] = item; });
   db.ref(path).set(obj);
 }
 
@@ -1549,8 +1566,24 @@ function updateCounts() {
   document.getElementById('cnt-cobro').textContent    = data.filter(s => s.factura && !s.pago).length;
 }
 
+// ── Ordenamiento ──
+let sortDir = 'desc'; // 'desc' = más reciente primero, 'asc' = más antiguo primero
+
+function toggleSort() {
+  sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+  document.getElementById('sort-icon').textContent = sortDir === 'desc' ? '↓' : '↑';
+  renderTable();
+}
+
 function renderTable() {
-  const lista = data.filter(s => filtrarPorVista(s) && filtrarPorBusqueda(s));
+  let lista = data.filter(s => filtrarPorVista(s) && filtrarPorBusqueda(s));
+
+  // Ordenar por fecha de inspección
+  lista.sort((a, b) => {
+    const fa = a.fecha || '';
+    const fb = b.fecha || '';
+    return sortDir === 'desc' ? fb.localeCompare(fa) : fa.localeCompare(fb);
+  });
   const tbody = document.getElementById('tbody');
 
   if (!lista.length) {
