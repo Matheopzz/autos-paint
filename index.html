@@ -651,6 +651,7 @@
 </head>
 <body>
 
+<div id="app-wrapper" style="display:none;min-height:100vh;">
 <div class="layout">
 
   <!-- Sidebar -->
@@ -729,6 +730,10 @@
         <span class="nav-count" id="cnt-cuentas">0</span>
       </button>
       <div class="nav-label" style="margin-top:auto;"></div>
+      <button class="nav-item" onclick="doLogout()" style="color:rgba(224,112,96,0.7);">
+        <span class="nav-icon">⎋</span>
+        <span>Cerrar sesión</span>
+      </button>
     </nav>
   </aside>
     </nav>
@@ -894,8 +899,7 @@
     </main>
   </div>
 </div>
-
-<!-- Modal trabajo particular -->
+</div><!-- /app-wrapper -->
 <div class="overlay hidden" id="overlay-particular">
   <div class="modal" style="max-width:500px;">
     <div class="modal-header">
@@ -2496,16 +2500,105 @@ function calNextMonth() {
   renderCalendario();
 }
 
-// ── Init ──
-window.addEventListener('load', function() {
+// ── Usuarios ──
+const USUARIOS = {
+  'mateo':    { pass: 'taller2024', nombre: 'Mateo' },
+  'empleado1':{ pass: 'emp2024',    nombre: 'Empleado 1' },
+};
+
+let usuarioActual = null;
+
+function checkLogin() {
+  const session = sessionStorage.getItem('ap_user');
+  if (session) {
+    usuarioActual = session;
+    return true;
+  }
+  return false;
+}
+
+function doLogin() {
+  const user = document.getElementById('login-user').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  const err  = document.getElementById('login-error');
+  if (USUARIOS[user] && USUARIOS[user].pass === pass) {
+    sessionStorage.setItem('ap_user', user);
+    usuarioActual = user;
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app-wrapper').style.display = 'flex';
+    iniciarApp();
+  } else {
+    err.textContent = 'Usuario o contraseña incorrectos.';
+    err.style.display = 'block';
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-pass').focus();
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('ap_user');
+  location.reload();
+}
+
+function iniciarApp() {
   firebase.initializeApp(FB_CONFIG);
   db = firebase.database();
   loadData();
   loadPagos();
   loadCuentas();
   loadParticulares();
+}
+
+// ── Init ──
+window.addEventListener('load', function() {
+  if (checkLogin()) {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app-wrapper').style.display = 'flex';
+    iniciarApp();
+  } else {
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.getElementById('app-wrapper').style.display = 'none';
+    setTimeout(() => document.getElementById('login-user').focus(), 100);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-overlay').style.display === 'flex') {
+    doLogin();
+  }
 });
 </script>
+
+<!-- Login -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#1C1A16;z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#272420;border:1px solid rgba(201,162,39,0.2);border-radius:16px;width:100%;max-width:380px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+    <div style="padding:2rem;text-align:center;border-bottom:1px solid rgba(201,162,39,0.15);">
+      <div style="font-size:13px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:rgba(201,162,39,0.7);margin-bottom:6px;">Estética Vehicular</div>
+      <div style="font-size:26px;font-weight:700;color:#F2EFE8;">Autos Paint</div>
+    </div>
+    <div style="padding:2rem;">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(242,239,232,0.4);">Usuario</label>
+          <input type="text" id="login-user" placeholder="tu usuario" autocomplete="username"
+            style="background:rgba(255,255,255,0.06);border:1px solid rgba(201,162,39,0.25);border-radius:8px;padding:10px 14px;color:#F2EFE8;font-size:14px;font-family:inherit;outline:none;"
+            onfocus="this.style.borderColor='rgba(201,162,39,0.6)'" onblur="this.style.borderColor='rgba(201,162,39,0.25)'">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(242,239,232,0.4);">Contraseña</label>
+          <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"
+            style="background:rgba(255,255,255,0.06);border:1px solid rgba(201,162,39,0.25);border-radius:8px;padding:10px 14px;color:#F2EFE8;font-size:14px;font-family:inherit;outline:none;"
+            onfocus="this.style.borderColor='rgba(201,162,39,0.6)'" onblur="this.style.borderColor='rgba(201,162,39,0.25)'">
+        </div>
+        <div id="login-error" style="display:none;color:#E07060;font-size:13px;text-align:center;"></div>
+        <button onclick="doLogin()" style="margin-top:4px;background:#C9A227;color:#1C1A16;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.15s;"
+          onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+          Ingresar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
