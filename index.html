@@ -1344,33 +1344,16 @@ function initFirebase(cfg) {
   const btn = document.querySelector('#setup-overlay .btn-dark');
   if (btn) { btn.textContent = 'Conectando...'; btn.disabled = true; }
   try {
-    // Limpiar apps previas si las hay
     firebase.apps.forEach(app => app.delete());
     firebase.initializeApp(cfg);
     db = firebase.database();
-
-    // Probar la conexión antes de guardar
-    db.ref('.info/connected').once('value', snap => {
-      localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
-      document.getElementById('setup-overlay').style.display = 'none';
-      migrarLocalStorageAFirebase();
-      initApp();
-    }, err => {
-      if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
-      alert('No se pudo conectar a Firebase.\nVerificá el Database URL y que la Realtime Database esté activa.\n\nError: ' + err.message);
-    });
-
-    // Timeout de 8 segundos por si no responde
-    setTimeout(() => {
-      if (document.getElementById('setup-overlay').style.display !== 'none') {
-        if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
-        alert('Tiempo de espera agotado. Verificá que el Database URL sea correcto:\nhttps://tu-proyecto-default-rtdb.firebaseio.com');
-      }
-    }, 8000);
-
+    localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
+    document.getElementById('setup-overlay').style.display = 'none';
+    migrarLocalStorageAFirebase();
+    initApp();
   } catch(e) {
     if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
-    alert('Error al configurar Firebase: ' + e.message);
+    alert('Error al conectar: ' + e.message);
   }
 }
 
