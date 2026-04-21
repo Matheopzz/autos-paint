@@ -1683,9 +1683,17 @@ function saveSiniestro() {
 
   if (editId !== null) {
     const idx = data.findIndex(x => x.id === editId);
-    if (idx !== -1) data[idx] = { ...data[idx], ...sini };
+    if (idx !== -1) {
+      const anterior = { ...data[idx] };
+      data[idx] = { ...data[idx], ...sini };
+      const cambios = detectarCambiosEstado(anterior, data[idx]);
+      if (cambios.length > 0) cambios.forEach(c => registrarCambio(data[idx], c));
+      else registrarCambio(data[idx], 'Editó el siniestro');
+    }
   } else {
     sini.id = Date.now();
+    sini.historial = [];
+    registrarCambio(sini, 'Creó el siniestro');
     data.unshift(sini);
   }
 
@@ -1709,6 +1717,42 @@ function saveSiniestro() {
 function saveSiniestroYCerrar() {
   saveSiniestro();
   closeForm();
+}
+
+// ── Historial de cambios ──
+function registrarCambio(siniestro, descripcion) {
+  if (!usuarioActual) return;
+  const ahora = new Date();
+  const entrada = {
+    usuario: USUARIOS[usuarioActual]?.nombre || usuarioActual,
+    fecha:   ahora.toISOString().slice(0,10),
+    hora:    ahora.toTimeString().slice(0,5),
+    accion:  descripcion,
+  };
+  if (!siniestro.historial) siniestro.historial = [];
+  siniestro.historial.unshift(entrada); // más reciente primero
+}
+
+function detectarCambiosEstado(anterior, nuevo) {
+  const campos = [
+    { key: 'ot',        label: 'OT recibida' },
+    { key: 'rep',       label: 'Repuestos recibidos' },
+    { key: 'turno',     label: 'Turno asignado' },
+    { key: 'enproceso', label: 'En proceso' },
+    { key: 'entrega',   label: 'Entregado' },
+    { key: 'factura',   label: 'Facturado' },
+    { key: 'pago',      label: 'Pago recibido' },
+  ];
+  const cambios = [];
+  campos.forEach(({ key, label }) => {
+    if (anterior[key] !== nuevo[key]) {
+      cambios.push(nuevo[key] ? `Marcó "${label}"` : `Desmarcó "${label}"`);
+    }
+  });
+  if (anterior.turnoFecha !== nuevo.turnoFecha && nuevo.turnoFecha) {
+    cambios.push(`Asignó turno: ${fmtFecha(nuevo.turnoFecha)}`);
+  }
+  return cambios;
 }
 
 // ── Popover estado rápido ──
@@ -1741,13 +1785,22 @@ function openStatusPopover(id, el, event) {
   const pop = document.getElementById('status-popover');
   pop.style.display = 'block';
 
-  // Posicionar cerca del badge
+  // Calcular dimensiones reales del popover
+  const pw = pop.offsetWidth || 300;
+  const ph = pop.offsetHeight || 420;
   const rect = el.getBoundingClientRect();
-  const pw = 300;
+  const margin = 10;
+
+  // Posición horizontal: preferir a la izquierda del badge, ajustar si se sale
   let left = rect.left;
+  if (left + pw > window.innerWidth - margin) left = window.innerWidth - pw - margin;
+  if (left < margin) left = margin;
+
+  // Posición vertical: preferir abajo, si no entra poner arriba
   let top = rect.bottom + 6;
-  if (left + pw > window.innerWidth - 12) left = window.innerWidth - pw - 12;
-  if (top + 400 > window.innerHeight) top = rect.top - 10;
+  if (top + ph > window.innerHeight - margin) top = rect.top - ph - 6;
+  if (top < margin) top = margin;
+
   pop.style.left = left + 'px';
   pop.style.top  = top + 'px';
 }
@@ -1776,7 +1829,16 @@ function saveStatusAndClose() {
   if (spId === null) return;
   const idx = data.findIndex(x => x.id === spId);
   if (idx === -1) return;
+  // Comparar contra el snapshot original (antes de abrir el popover)
+  const anterior = spSnapshot || {};
   data[idx].turnoFecha = document.getElementById('sp-turno-fecha').value;
+  const cambios = detectarCambiosEstado(anterior, data[idx]);
+  if (anterior.turnoFecha !== data[idx].turnoFecha && data[idx].turnoFecha) {
+    cambios.push(`Asignó turno: ${fmtFecha(data[idx].turnoFecha)}`);
+  }
+  if (cambios.length > 0) {
+    cambios.forEach(c => registrarCambio(data[idx], c));
+  }
   spSnapshot = null;
   saveData();
   renderStats();
@@ -1866,6 +1928,22 @@ function openDetail(id) {
       <button class="btn btn-outline" onclick="closeDetail()">Cerrar</button>
       <button class="btn btn-dark" onclick="closeDetail(); openEdit(${s.id})">Editar</button>
     </div>
+    ${s.historial && s.historial.length ? `
+    <div style="padding:0 1.5rem 1.5rem;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);padding:1rem 0 10px;border-top:1px solid var(--border);">Historial de cambios</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${s.historial.map(h => `
+          <div style="display:flex;align-items:flex-start;gap:10px;font-size:12.5px;">
+            <div style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:5px;"></div>
+            <div style="flex:1;">
+              <span style="font-weight:600;color:var(--accent-dark);">${h.usuario}</span>
+              <span style="color:var(--text2);"> — ${h.accion}</span>
+              <div style="font-size:11px;color:var(--text3);margin-top:1px;">${fmtFecha(h.fecha)} ${h.hora}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
   `;
   document.getElementById('overlay-detail').classList.remove('hidden');
 }
