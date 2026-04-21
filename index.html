@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Autos Paint — Gestión de Siniestros</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #F2EFE8;
@@ -727,10 +725,8 @@
         <span class="nav-count" id="cnt-cuentas">0</span>
       </button>
       <div class="nav-label" style="margin-top:auto;"></div>
-      <button class="nav-item" onclick="document.getElementById('setup-overlay').style.display='flex'" style="margin-top:auto;">
-        <span class="nav-icon">🔥</span>
-        <span>Firebase</span>
-      </button>
+    </nav>
+  </aside>
     </nav>
   </aside>
 
@@ -1333,63 +1329,24 @@
 </style>
 
 <script>
-// ── Firebase ──
+// ── Firebase con credenciales fijas ──
+const FB_CONFIG = {
+  apiKey:            "AIzaSyCr3GVOW_QpEXn1oARNQC0Gxrm4ELkWRLY",
+  authDomain:        "autos-paint-2c15c.firebaseapp.com",
+  databaseURL:       "https://autos-paint-2c15c-default-rtdb.firebaseio.com",
+  projectId:         "autos-paint-2c15c",
+  storageBucket:     "autos-paint-2c15c.firebasestorage.app",
+  messagingSenderId: "310224462919",
+  appId:             "1:310224462919:web:73c7261aba79236eedfd62"
+};
+
 let db = null;
-
-function getStoredConfig() {
-  try { return JSON.parse(localStorage.getItem('autospaint_fb_cfg')); } catch(e) { return null; }
-}
-
-function initFirebase(cfg) {
-  const btn = document.querySelector('#setup-overlay .btn-dark');
-  if (btn) { btn.textContent = 'Conectando...'; btn.disabled = true; }
-  try {
-    firebase.apps.forEach(app => app.delete());
-    firebase.initializeApp(cfg);
-    db = firebase.database();
-    localStorage.setItem('autospaint_fb_cfg', JSON.stringify(cfg));
-    document.getElementById('setup-overlay').style.display = 'none';
-    migrarLocalStorageAFirebase();
-    initApp();
-  } catch(e) {
-    if (btn) { btn.textContent = 'Conectar y guardar'; btn.disabled = false; }
-    alert('Error al conectar: ' + e.message);
-  }
-}
-
-function migrarLocalStorageAFirebase() {
-  // Migra datos viejos de localStorage a Firebase (solo si Firebase está vacío)
-  const colecciones = [
-    { ls: 'taller_siniestros_v2', fb: 'siniestros' },
-    { ls: 'taller_pagos_v1',      fb: 'pagos'      },
-    { ls: 'taller_cuentas_v1',    fb: 'cuentas'    },
-    { ls: 'taller_particulares_v1', fb: 'particulares' },
-  ];
-  colecciones.forEach(({ ls, fb }) => {
-    const raw = localStorage.getItem(ls);
-    if (!raw) return;
-    try {
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr) || arr.length === 0) return;
-      // Solo migrar si Firebase está vacío
-      db.ref(fb).once('value', snap => {
-        if (!snap.val()) {
-          fbSave(fb, arr);
-          console.log(`Migrado ${arr.length} registros de ${ls} a Firebase/${fb}`);
-        }
-      });
-    } catch(e) {}
-  });
-}
 
 function fbListen(path, cb) {
   db.ref(path).on('value', snap => {
     const val = snap.val();
     if (!val) { cb([]); return; }
-    // Firebase puede devolver objeto o array, normalizamos siempre a array
-    const arr = Array.isArray(val)
-      ? val.filter(Boolean)
-      : Object.values(val).filter(Boolean);
+    const arr = Array.isArray(val) ? val.filter(Boolean) : Object.values(val).filter(Boolean);
     cb(arr);
   });
 }
@@ -1401,7 +1358,6 @@ function fbSave(path, arr) {
 }
 
 // ── Variables globales ──
-const STORAGE_KEY = 'taller_siniestros_v2';
 let data = [];
 let editId = null;
 let viewActivo = 'todos';
@@ -1414,7 +1370,7 @@ function fmtFecha(str) {
   return `${d}/${m}/${y}`;
 }
 
-// ── Persistencia (Firebase) ──
+// ── Persistencia ──
 function loadData() {
   fbListen('siniestros', val => { data = val; render(); });
 }
@@ -1969,7 +1925,6 @@ const CAT_GASTO   = ['Insumos / materiales','Herramientas','Alquiler','Servicios
 function loadPagos() {
   fbListen('pagos', val => { pagos = val; if (viewActivo === 'pagos') renderPagos(); });
 }
-
 function savePagos() { fbSave('pagos', pagos); }
 
 function pagosPrevMonth() {
@@ -2538,75 +2493,13 @@ function calNextMonth() {
 }
 
 // ── Init ──
-function initApp() {
-  loadData();
-  loadPagos();
-  loadCuentas();
-  loadParticulares();
-}
-
-const savedCfg = getStoredConfig();
-if (savedCfg && savedCfg.apiKey && savedCfg.databaseURL) {
-  initFirebase(savedCfg);
-} else {
-  document.getElementById('setup-overlay').style.display = 'flex';
-}
+firebase.initializeApp(FB_CONFIG);
+db = firebase.database();
+loadData();
+loadPagos();
+loadCuentas();
+loadParticulares();
 </script>
-<!-- Setup Firebase -->
-<div id="setup-overlay" style="display:none;position:fixed;inset:0;background:rgba(28,26,22,0.85);z-index:999;align-items:center;justify-content:center;padding:1rem;">
-  <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:100%;max-width:520px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,0.3);">
-    <div style="background:var(--sidebar-bg);padding:1.5rem;display:flex;align-items:center;gap:12px;">
-      <div style="font-size:28px;">🔥</div>
-      <div>
-        <div style="font-size:16px;font-weight:600;color:#F2EFE8;">Configurar Firebase</div>
-        <div style="font-size:12px;color:rgba(242,239,232,0.5);margin-top:2px;">Necesario para sincronizar entre dispositivos</div>
-      </div>
-    </div>
-    <div style="padding:1.5rem;">
-      <div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:1.25rem;font-size:13px;color:var(--accent-dark);">
-        <strong>¿Cómo obtener estos datos?</strong><br>
-        1. Entrá a <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent-dark);">console.firebase.google.com</a><br>
-        2. Creá un proyecto → Agregá una app web<br>
-        3. Activá <strong>Realtime Database</strong> → Start in test mode<br>
-        4. En <strong>Reglas</strong>, asegurate que diga: <code style="background:rgba(0,0,0,0.08);padding:1px 4px;border-radius:3px;">".read": true, ".write": true</code><br>
-        5. Copiá y pegá el objeto <code>firebaseConfig</code> acá abajo
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">API Key *</label>
-          <input type="text" id="fb-apiKey" placeholder="AIzaSy..." style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">Auth Domain</label>
-          <input type="text" id="fb-authDomain" placeholder="proyecto.firebaseapp.com" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">Database URL *</label>
-          <input type="text" id="fb-databaseURL" placeholder="https://proyecto-default-rtdb..." style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">Project ID</label>
-          <input type="text" id="fb-projectId" placeholder="mi-proyecto" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">Storage Bucket</label>
-          <input type="text" id="fb-storageBucket" placeholder="proyecto.appspot.com" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">Messaging Sender ID</label>
-          <input type="text" id="fb-messagingSenderId" placeholder="123456789" style="width:100%;">
-        </div>
-        <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);">App ID</label>
-          <input type="text" id="fb-appId" placeholder="1:123:web:abc..." style="width:100%;">
-        </div>
-      </div>
-    </div>
-    <div style="padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;">
-      <button class="btn btn-dark" onclick="saveSetup()">Conectar y guardar</button>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
