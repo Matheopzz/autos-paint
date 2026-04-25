@@ -1380,10 +1380,14 @@ function fmtFecha(str) {
 
 // ── Persistencia ──
 function loadData() {
+  if (!db) return;
   fbListen('siniestros', val => { data = val; render(); });
 }
 
-function saveData() { fbSave('siniestros', data); }
+function saveData() {
+  if (!db) { console.error('Firebase no inicializado'); return; }
+  fbSave('siniestros', data);
+}
 
 // ── Estado ──
 const ESTADOS = {
@@ -1724,7 +1728,7 @@ function registrarCambio(siniestro, descripcion) {
   if (!usuarioActual) return;
   const ahora = new Date();
   const entrada = {
-    usuario: USUARIOS[usuarioActual]?.nombre || usuarioActual,
+    usuario: usuarioActual,
     fecha:   ahora.toISOString().slice(0,10),
     hora:    ahora.toTimeString().slice(0,5),
     accion:  descripcion,
@@ -1972,6 +1976,10 @@ document.getElementById('overlay-detail').addEventListener('click', function(e) 
 document.addEventListener('keydown', e => {
   const formOpen      = !document.getElementById('overlay-form').classList.contains('hidden');
   const partOpen      = !document.getElementById('overlay-particular').classList.contains('hidden');
+  const loginOpen     = document.getElementById('login-overlay').style.display === 'flex';
+
+  // Enter en login
+  if (e.key === 'Enter' && loginOpen) { doLogin(); return; }
 
   // Escape — cerrar modales
   if (e.key === 'Escape') {
@@ -1979,22 +1987,22 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl+Enter — guardar sin cerrar (dentro de modales)
-  if (e.ctrlKey && e.key === 'Enter') {
-    if (formOpen) { e.preventDefault(); saveSiniestro(); }
-    else if (partOpen) { e.preventDefault(); saveParticular(); }
+  // Ctrl+Enter — guardar sin cerrar (solo cuando es nuevo siniestro, no edición)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    if (formOpen && editId === null) saveSiniestro();
     return;
   }
 
   // Atajos globales (solo si no hay modal abierto)
-  if (formOpen || partOpen) return;
+  if (formOpen || partOpen || loginOpen) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
   // Ctrl+I — nuevo siniestro
-  if (e.ctrlKey && e.key === 'i') { e.preventDefault(); openNew(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); openNew(); }
 
   // Ctrl+Y — nuevo trabajo particular
-  if (e.ctrlKey && e.key === 'y') { e.preventDefault(); openParticularModal(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); openParticularModal(); }
 });
 
 // ── Pagos ──
@@ -2009,9 +2017,10 @@ const CAT_INGRESO = ['Cobro seguro','Trabajo particular','Anticipo','Otros ingre
 const CAT_GASTO   = ['Insumos / materiales','Herramientas','Alquiler','Servicios (luz, agua, gas)','Sueldos','Impuestos','Otros gastos'];
 
 function loadPagos() {
+  if (!db) return;
   fbListen('pagos', val => { pagos = val; if (viewActivo === 'pagos') renderPagos(); });
 }
-function savePagos() { fbSave('pagos', pagos); }
+function savePagos() { if (!db) return; fbSave('pagos', pagos); }
 
 function pagosPrevMonth() {
   pagosMonth--;
@@ -2156,10 +2165,11 @@ const CAT_PAGAR  = ['Repuestos / proveedor','Alquiler','Servicios','Sueldos','Im
 const CAT_COBRAR = ['Franquicia','Trabajo particular','Seña pendiente','Otros'];
 
 function loadCuentas() {
+  if (!db) return;
   fbListen('cuentas', val => { cuentas = val; updateCuentasCount(); if (viewActivo === 'cuentas') renderCuentas(); });
 }
 
-function saveCuentas() { fbSave('cuentas', cuentas); }
+function saveCuentas() { if (!db) return; fbSave('cuentas', cuentas); }
 
 function updateCuentasCount() {
   const n = cuentas.filter(c => !c.saldada).length;
@@ -2311,10 +2321,11 @@ const PART_ESTADOS = {
 };
 
 function loadParticulares() {
+  if (!db) return;
   fbListen('particulares', val => { particulares = val; updateParticularesCount(); if (viewActivo === 'particulares') renderParticulares(); });
 }
 
-function saveParticulares() { fbSave('particulares', particulares); }
+function saveParticulares() { if (!db) return; fbSave('particulares', particulares); }
 
 function updateParticularesCount() {
   const n = particulares.length;
@@ -2616,7 +2627,10 @@ function doLogout() {
 }
 
 function iniciarApp(user) {
-  usuarioActual = user.email.split('@')[0]; // usar parte antes del @ como nombre
+  usuarioActual = user.email.split('@')[0];
+  if (!firebase.apps.length) {
+    firebase.initializeApp(FB_CONFIG);
+  }
   db = firebase.database();
   loadData();
   loadPagos();
@@ -2644,9 +2658,35 @@ window.addEventListener('load', function() {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('login-overlay').style.display === 'flex') {
-    doLogin();
+  const formOpen  = !document.getElementById('overlay-form').classList.contains('hidden');
+  const partOpen  = !document.getElementById('overlay-particular').classList.contains('hidden');
+  const loginOpen = document.getElementById('login-overlay').style.display === 'flex';
+
+  // Enter en login
+  if (e.key === 'Enter' && loginOpen) { doLogin(); return; }
+
+  // Escape — cerrar modales
+  if (e.key === 'Escape') {
+    closeForm(); closeDetail(); closeStatusPopover(); closeParticularModal();
+    return;
   }
+
+  // Ctrl+Enter — solo cuando estás cargando un NUEVO siniestro de seguro
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    if (formOpen && editId === null) saveSiniestro();
+    return;
+  }
+
+  // Atajos globales (solo si no hay modal abierto)
+  if (formOpen || partOpen || loginOpen) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+  // Ctrl+I — nuevo siniestro
+  if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); openNew(); }
+
+  // Ctrl+Y — nuevo trabajo particular
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); openParticularModal(); }
 });
 </script>
 
