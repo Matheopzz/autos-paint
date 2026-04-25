@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   :root {
@@ -2578,48 +2578,45 @@ function calNextMonth() {
   renderCalendario();
 }
 
-// ── Usuarios ──
-const USUARIOS = {
-  'mateo':    { pass: 'taller2024', nombre: 'Mateo' },
-  'empleado1':{ pass: 'emp2024',    nombre: 'Empleado 1' },
-};
-
+// ── Firebase Authentication ──
 let usuarioActual = null;
-
-function checkLogin() {
-  const session = sessionStorage.getItem('ap_user');
-  if (session) {
-    usuarioActual = session;
-    return true;
-  }
-  return false;
-}
+let auth = null;
 
 function doLogin() {
-  const user = document.getElementById('login-user').value.trim().toLowerCase();
-  const pass = document.getElementById('login-pass').value;
-  const err  = document.getElementById('login-error');
-  if (USUARIOS[user] && USUARIOS[user].pass === pass) {
-    sessionStorage.setItem('ap_user', user);
-    usuarioActual = user;
-    document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('app-wrapper').style.display = 'flex';
-    iniciarApp();
-  } else {
-    err.textContent = 'Usuario o contraseña incorrectos.';
+  const email = document.getElementById('login-user').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const err   = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+
+  if (!email || !pass) {
+    err.textContent = 'Completá email y contraseña.';
     err.style.display = 'block';
-    document.getElementById('login-pass').value = '';
-    document.getElementById('login-pass').focus();
+    return;
   }
+
+  btn.textContent = 'Ingresando...';
+  btn.disabled = true;
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred => {
+      // El onAuthStateChanged maneja el resto
+    })
+    .catch(e => {
+      btn.textContent = 'Ingresar';
+      btn.disabled = false;
+      err.textContent = 'Email o contraseña incorrectos.';
+      err.style.display = 'block';
+      document.getElementById('login-pass').value = '';
+      document.getElementById('login-pass').focus();
+    });
 }
 
 function doLogout() {
-  sessionStorage.removeItem('ap_user');
-  location.reload();
+  auth.signOut().then(() => location.reload());
 }
 
-function iniciarApp() {
-  firebase.initializeApp(FB_CONFIG);
+function iniciarApp(user) {
+  usuarioActual = user.email.split('@')[0]; // usar parte antes del @ como nombre
   db = firebase.database();
   loadData();
   loadPagos();
@@ -2629,15 +2626,21 @@ function iniciarApp() {
 
 // ── Init ──
 window.addEventListener('load', function() {
-  if (checkLogin()) {
-    document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('app-wrapper').style.display = 'flex';
-    iniciarApp();
-  } else {
-    document.getElementById('login-overlay').style.display = 'flex';
-    document.getElementById('app-wrapper').style.display = 'none';
-    setTimeout(() => document.getElementById('login-user').focus(), 100);
-  }
+  firebase.initializeApp(FB_CONFIG);
+  auth = firebase.auth();
+  db = null;
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      document.getElementById('login-overlay').style.display = 'none';
+      document.getElementById('app-wrapper').style.display = 'flex';
+      iniciarApp(user);
+    } else {
+      document.getElementById('login-overlay').style.display = 'flex';
+      document.getElementById('app-wrapper').style.display = 'none';
+      setTimeout(() => document.getElementById('login-user').focus(), 100);
+    }
+  });
 });
 
 document.addEventListener('keydown', e => {
@@ -2657,8 +2660,8 @@ document.addEventListener('keydown', e => {
     <div style="padding:2rem;">
       <div style="display:flex;flex-direction:column;gap:12px;">
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(242,239,232,0.4);">Usuario</label>
-          <input type="text" id="login-user" placeholder="tu usuario" autocomplete="username"
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(242,239,232,0.4);">Email</label>
+          <input type="email" id="login-user" placeholder="tu@email.com" autocomplete="email"
             style="background:rgba(255,255,255,0.06);border:1px solid rgba(201,162,39,0.25);border-radius:8px;padding:10px 14px;color:#F2EFE8;font-size:14px;font-family:inherit;outline:none;"
             onfocus="this.style.borderColor='rgba(201,162,39,0.6)'" onblur="this.style.borderColor='rgba(201,162,39,0.25)'">
         </div>
@@ -2669,7 +2672,7 @@ document.addEventListener('keydown', e => {
             onfocus="this.style.borderColor='rgba(201,162,39,0.6)'" onblur="this.style.borderColor='rgba(201,162,39,0.25)'">
         </div>
         <div id="login-error" style="display:none;color:#E07060;font-size:13px;text-align:center;"></div>
-        <button onclick="doLogin()" style="margin-top:4px;background:#C9A227;color:#1C1A16;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.15s;"
+        <button id="login-btn" onclick="doLogin()" style="margin-top:4px;background:#C9A227;color:#1C1A16;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.15s;"
           onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
           Ingresar
         </button>
