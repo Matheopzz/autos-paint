@@ -1661,7 +1661,7 @@ function updateCheckRow(rowId, cbId) {
 
 function saveSiniestro() {
   const cliente = document.getElementById('f-cliente').value.trim();
-  if (!cliente) { alert('Por favor ingresá el nombre del cliente.'); return; }
+  if (!cliente) return; // La validación ya se hace en el listener de teclado o en el botón
 
   const sini = {
     num:        document.getElementById('f-num').value.trim(),
@@ -2674,7 +2674,17 @@ document.addEventListener('keydown', e => {
   // Ctrl+Enter — solo cuando estás cargando un NUEVO siniestro de seguro
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault();
-    if (formOpen && editId === null) saveSiniestro();
+    e.stopPropagation();
+    if (formOpen && editId === null) {
+      const cliente = document.getElementById('f-cliente').value.trim();
+      if (!cliente) {
+        document.getElementById('f-cliente').focus();
+        document.getElementById('f-cliente').style.borderColor = 'var(--accent2)';
+        setTimeout(() => document.getElementById('f-cliente').style.borderColor = '', 2000);
+        return;
+      }
+      saveSiniestro();
+    }
     return;
   }
 
